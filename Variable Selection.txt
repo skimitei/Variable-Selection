@@ -1,0 +1,292 @@
+---
+title: "VARIABLE SELECTION IN R"
+author: "Symon Kimitei"
+date: "4/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+## R Markdown
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(lattice)
+library(rpart)
+library(Matrix)
+library(caret)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(plotly)
+library(caret)
+library(caTools)
+library(dplyr)
+library(performance)
+```
+
+
+
+```{r}
+setwd("C:/Users/skimitei/Desktop/stat_8210/hwk6")
+boston<-read.csv("boston.csv", header = T, sep = ",", row.names =1)
+#head(boston)
+boston$ID <- 1:nrow(boston)
+#boston<-boston[!duplicated(boston$ID), ]
+
+
+
+library(dplyr) # from version 1.0.0 
+
+col_idx <- grep("ID", names(boston))
+boston <- boston[, c(col_idx, (1:ncol(boston))[-col_idx])]
+names(boston)
+head(boston)
+
+
+```
+
+```{r}
+# Display the class of the R object housing.df
+glimpse(boston)
+```
+
+
+
+```{r}
+#set a seed 
+set.seed(1998)
+split <- sample.split(boston,SplitRatio =0.80)
+train <- subset(boston,split==TRUE)
+test <- subset(boston,split==FALSE)
+
+dim(train)
+```
+
+
+
+```{r}
+# DEVELOPING THE HOUSING PRICE PREDICTION MODEL
+#=================================================================
+# crim - per capita crime rate by town
+# zn - proportion of residential land zoned for lots over 25,000 sq.ft
+# indus - proportion of non-retail business acres per town
+# chas - Charles River dummy variable (= 1 if tract bounds river; 0 otherwise)
+# nox - nitric oxides concentration (parts per 10 million)
+# rm - average number of rooms per dwelling
+# age - proportion of owner-occupied units built prior to 1940
+# dis - weighted distances to five Boston employment centres
+# rad - index of accessibility to radial highways
+# tax - full-value property-tax rate per USD 10,000
+# ptratio- pupil-teacher ratio by town
+# black - the proportion of blacks by town
+# lstat - percentage of lower status of the population
+# medv - median home value in various neighborhoods(median value of owner-occupied homes in USD 1000â€™s)
+
+# Fit the model by expressing all the parameters as follows:
+
+#model <- lm(medv ~ crim + zn + indus+ chas + nox + rm + tax + age + dis 
+#            + rad + tax + ptratio+ black + lstat , data = train)
+
+# OR
+train$ID<-NULL
+model <- lm(medv ~., data = train)
+summary(model)
+```
+
+### Display the VIF values for each predictor
+```{r}
+all_vifs <- car::vif(model)
+print(all_vifs)
+```
+
+
+
+### Plot VIF values for each predictor by using the Performance package
+
+```{r}
+
+vif_dat <- check_collinearity(model)
+vif_dat$Parameter
+vif_dat$Parameter<-c("crim","zn","indus","chas","nox","rm","age","dis","rad","tax","ptratio","black","lstat")
+
+
+fig <- plot_ly(vif_dat, type='bar', x = ~Parameter, y = ~VIF, text = ~Parameter, name="",
+               hovertemplate = paste('VIF: %{y}', ''),
+               texttemplate = '%{y:.2s}', textposition = 'outside')
+
+fig <- fig %>% layout(uniformtext=list(minsize=8, mode='hide'))
+fig
+```
+
+
+### Print the metrics of the model before applying forward, backward and stepwise selection
+```{r}
+
+library(modelr)
+data.frame(
+  Rsq = rsquare(model, data = train),
+  RMSE = rmse(model,data=train),
+  MAE= mae(model, data = train),
+  AIC = AIC(model),
+  BIC= BIC(model),
+  AdRsq=summary(model)$adj.r.squared
+)
+
+
+```
+
+### Store 
+
+```{r}
+library(broom)
+results1<-glance(model)
+write.csv(results1,"metrics2.csv")
+```
+
+
+
+```{r}
+# Apply Forward Selection: Starting with the intercept-only model before adding predictors to the model and evaluating their usefulness 
+model1 <- lm(medv ~1, data = train)
+model_forwd<-step(model1,direction="forward",scope=formula(model))
+
+```
+
+### Find the AdjR^2, AIC and BIC values for model with AIC=1249
+```{r}
+fwdmodel1<-lm(medv~lstat+rm+ptratio+chas+black+dis+zn+crim+age+indus,data=train)
+summary(fwdmodel1)
+AIC(fwdmodel1)
+BIC(fwdmodel1)
+
+```
+
+### Find the AdjR^2, AIC and BIC values for model with AIC=1250.73
+
+```{r}
+fwdmodel2<-lm(medv~lstat+rm+ptratio+chas+black+dis+zn+crim+age,data=train)
+summary(fwdmodel2)
+AIC(fwdmodel2)
+BIC(fwdmodel2)
+```
+
+
+### Find the AdjR^2, AIC and BIC values for model with AIC=1254.16
+
+```{r}
+fwdmodel3<-lm(medv~lstat+rm+ptratio+chas+black+dis+zn+crim,data=train)
+summary(fwdmodel3)
+AIC(fwdmodel3)
+BIC(fwdmodel3)
+```
+
+
+### We could also search through the possible models in a backwards fashion using BIC. 
+### To do so, we again use the step() function. In Backward selection, R labels BIC as AIC
+
+```{r}
+
+# Apply Backward Selection: Starting with the full model before removing some of the predictors that are not useful. 
+model2 <- lm(medv ~., data = train)
+n = length(resid(model2))
+model_back_bic = step(model2, direction = "backward")
+```
+
+
+```{r}
+bwd_model1<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat,data=train)
+summary(bwd_model1)
+BIC(bwd_model1)
+AIC(bwd_model1)
+```
+
+
+```{r}
+bwd_model2<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat+age,data=train)
+summary(bwd_model2)
+BIC(bwd_model2)
+AIC(bwd_model2)
+```
+
+
+
+```{r}
+bwd_model3<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat+age+indus,data=train)
+summary(bwd_model3)
+BIC(bwd_model3)
+AIC(bwd_model3)
+```
+
+
+```{r}
+# Apply Forward/Backward Selection
+fullmodel<- lm(medv ~., data = train)
+nullmodel<-lm(medv ~1, data = train)
+
+model_step <- step(fullmodel, scope=list(lower=nullmodel, upper=fullmodel), direction='both')
+```
+
+
+
+```{r}
+step_model1<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat,data=train)
+summary(step_model1)
+AIC(step_model1)
+BIC(step_model1)
+```
+
+
+
+
+```{r}
+step_model2<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat+age,data=train)
+summary(step_model2)
+AIC(step_model2)
+BIC(step_model2)
+```
+
+
+```{r}
+step_model3<-lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat+age+indus,data=train)
+summary(step_model3)
+AIC(step_model3)
+BIC(step_model3)
+```
+
+
+### Applying the different models in the table to the test dataset and recording the AdjR^2, AIC and BIC values
+### Model #1
+```{r}
+test_model1<-lm(medv~crim+zn+chas+rm+dis+ptratio+black+lstat+age+indus,data=test)
+summary(test_model1)
+AIC(test_model1)
+BIC(test_model1)
+```
+
+
+
+
+### Applying the different models in the table to the test dataset and recording the AdjR^2, AIC and BIC values
+### Model #2
+```{r}
+test_model2<-lm(medv~crim+zn+chas+rm+nox+dis+ptratio+black+lstat+tax+rad,data=test)
+summary(test_model2)
+AIC(test_model2)
+BIC(test_model2)
+```
+
+### Model #3
+```{r}
+test_model3<-lm(medv~crim+zn+chas+nox+rm+dis+ptratio+black+lstat+age+indus+tax,data=test)
+summary(test_model3)
+AIC(test_model3)
+BIC(test_model3)
+```
